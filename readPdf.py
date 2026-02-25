@@ -2,7 +2,7 @@ import pdfplumber
 import pandas as pd
 import re
 
-def transfer_to_table(path_to_pdf):
+def transfer_to_csv(path_to_pdf, target_csv_path):
     all_data = []
     with pdfplumber.open(path_to_pdf) as pdf:
         for page in pdf.pages:
@@ -23,6 +23,8 @@ def transfer_to_table(path_to_pdf):
                     if is_valid_transfer_date_row(row):
                         print("The row:  ", row)
 
+                        normalize_date_column_overflow(row)
+
                         # Fix overflow: a digit leaked into index 8 instead of staying with the amount at index 9
                         normalize_transfer_value_column_overflow(row)
 
@@ -33,7 +35,8 @@ def transfer_to_table(path_to_pdf):
                         all_data.append(row)
 
     if all_data:
-        transfer_to_csv(all_data)
+        df = pd.DataFrame(all_data)
+        df.to_csv(target_csv_path, index=False, encoding='utf-8')
         print("CSV saved successfully!")
     else:
         print("No tables found.")
@@ -50,6 +53,11 @@ def is_valid_transfer_date_row(row):
         re.match(r'^/?\d{2}/\d{2}$', second)
     )
 
+def normalize_date_column_overflow(row):
+    if row[0]:
+        row[1] = row[0] + row[1]
+        row[0] = ''
+
 def normalize_transfer_value_column_overflow(row):
     if len(row) >= 4 and row[-4]:
         row[-3] = row[-4] + row[-3]
@@ -60,12 +68,6 @@ def normalize_transfer_row_padding(row):
         missing = 12 - len(row)
         for _ in range(missing):
             row.insert(len(row) - 3, '')
-
-def transfer_to_csv(all_data):
-    targetPath = "target_CSV/transfer_log.csv"
-    df = pd.DataFrame(all_data)
-    df.to_csv(targetPath, index=False, encoding='utf-8')
-
 
 
     
