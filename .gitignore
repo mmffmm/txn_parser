@@ -1,0 +1,22 @@
+__pycache__/
+venv/
+.env
+*.pyc
+
+# Ignore all markdown files
+*.md
+
+# Except README.md
+!README.md
+
+# transaction pdf
+transaction_PDF/*
+!transaction_PDF/.gitkeep
+
+# transaction pdf
+target_CSV/*
+!target_CSV/.gitkeep
+
+# environment notes
+envNotes.txt
+test
