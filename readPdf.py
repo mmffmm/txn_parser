@@ -62,7 +62,7 @@ def normalize_transfer_row_padding(row):
             row.insert(len(row) - 3, '')
 
 def transfer_to_csv(all_data):
-    targetPath = "target_CSV/maybank.csv"
+    targetPath = "target_CSV/transfer_log.csv"
     df = pd.DataFrame(all_data)
     df.to_csv(targetPath, index=False, encoding='utf-8')
 
