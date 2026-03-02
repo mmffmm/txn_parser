@@ -1,14 +1,13 @@
 import os
-from dotenv import load_dotenv
+from pathlib import Path
 from src.etl.readPdf import transfer_to_csv
 from src.etl.loadDB import load_to_db
 
-load_dotenv()
-path_to_pdf = os.getenv("TRANSACTION_PDF_PATH") # PDF name might have personal infos
 path_to_csv = "target_CSV/transfer_log.csv"
+path_to_pdf_folder = "transaction_PDF"
 
-if not os.path.isfile(path_to_pdf):
-    raise SystemExit(f"PDF not found: {path_to_pdf}")
+list_of_pdf = [str(Path(path_to_pdf_folder) / f).replace("\\", "/") 
+               for f in os.listdir(path_to_pdf_folder) if f.endswith(".pdf")]
 
-transfer_to_csv(path_to_pdf, path_to_csv)
+transfer_to_csv(list_of_pdf, path_to_csv)
 load_to_db(path_to_csv)

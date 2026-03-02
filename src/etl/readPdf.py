@@ -7,56 +7,66 @@ ROW_SEPARATOR = ';'
 
 # Main Function
 
-def transfer_to_csv(path_to_pdf, target_csv_path):
-    all_data = []
-    current_record = None
-    with pdfplumber.open(path_to_pdf) as pdf:
-        for page in pdf.pages:
-            print("Page Number: ", page.page_number)
+    # DATE COLUMN consists of column 1 and 2, will be combined into column 2
+    # DESCRIPTION COLUMN consists of column 3 onwards and rows below, will be combined into column 3
+    # TOTAL BALANCE AND TRANSACTION COLUMNS is on the last 3 columns
+    # TOTAL NUMBER OF COLUMNS should be set to 11 only
 
-            tables = page.extract_tables({
-                "vertical_strategy": "text",
-                "horizontal_strategy": "text"
-            })
-            for table in tables:
-                if not table:
-                    continue
-                # iterate rows skipping header row (assume first row is header)
-                for row in table[1:]:
-                    if not row:
+    # Merging Description Column MUST RUN AFTER normalizing transaction date, because transaction got overflow
+
+def transfer_to_csv(list_of_pdf, target_csv_path):
+
+    all_data = []
+
+    for pdf_file in list_of_pdf:
+        
+        current_record = None
+
+        with pdfplumber.open(pdf_file) as pdf:
+            for page in pdf.pages:
+                # print("Page Number: ", page.page_number)
+
+                tables = page.extract_tables({
+                    "vertical_strategy": "text",
+                    "horizontal_strategy": "text"
+                })
+
+                for table in tables:
+                    if not table:
                         continue
 
-                    col_b = row[1].strip() if len(row) > 1 and row[1] else ''
+                    # iterate rows skipping header row (assume first row is header)
+                    for row in table[1:]:
+                        if not row:
+                            continue
 
-                    if not col_b:
-                        # Column B is empty: continuation row, merge description into current record
-                        if current_record is not None:
-                            merge_description_value_in_diff_rows(current_record, row)
+                        col_b = row[1].strip() if len(row) > 1 and row[1] else ''
+                        if not col_b:
+                            if current_record is not None:
+                                merge_description_value_in_diff_rows(current_record, row)
+                        
+                        elif is_valid_transfer_date_row(row):    
+                            # flush previous record and start a new one
+                            if current_record is not None:
+                                all_data.append(current_record)
 
-                    elif is_valid_transfer_date_row(row):
-                        # Column B is a date: flush previous record and start a new one
-                        if current_record is not None:
-                            print("Fixed row:", current_record)
-                            all_data.append(current_record)
+                            normalize_date_column_overflow(row)
+                            normalize_transfer_value_column_overflow(row)
+                            merge_description_value_in_diff_columns(row)
 
-                        print("The row:  ", row)
-                        normalize_date_column_overflow(row)
-                        normalize_transfer_value_column_overflow(row)
-                        normalize_transfer_row_padding(row)
-                        merge_description_value_in_diff_columns(row)
-                        current_record = row
+                            normalize_total_columns(row)
 
-                    else:
-                        # Column B has a value but is NOT a date: flush and stop — not a transaction row
-                        if current_record is not None:
-                            print("Fixed row:", current_record)
-                            all_data.append(current_record)
-                            current_record = None
+                            current_record = row
 
-    # Flush the last accumulated record
-    if current_record is not None:
-        print("Fixed row:", current_record)
-        all_data.append(current_record)
+                        else:
+                            # flush and stop — not a transaction row
+                            if current_record is not None:
+                                all_data.append(current_record)
+                                current_record = None
+
+        # Flush the last accumulated record
+        if current_record is not None:
+            all_data.append(current_record)
 
     if all_data:
         df = pd.DataFrame(all_data)
@@ -118,8 +128,12 @@ def normalize_transfer_value_column_overflow(row):
         row[-3] = row[-4] + row[-3]
         row[-4] = ''
 
-def normalize_transfer_row_padding(row):
+def normalize_total_columns(row):
     if len(row) < 12:
         missing = 12 - len(row)
         for _ in range(missing):
             row.insert(len(row) - 3, '')
+    elif len(row) >12:
+        extra = len(row) - 12
+        for _ in range(extra):
+            row.pop(3)
