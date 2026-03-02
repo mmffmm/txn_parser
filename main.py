@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
-from readPdf import transfer_to_csv
-from loadDB import load_to_db
+from src.etl.readPdf import transfer_to_csv
+from src.etl.loadDB import load_to_db
 
 load_dotenv()
 path_to_pdf = os.getenv("TRANSACTION_PDF_PATH") # PDF name might have personal infos
