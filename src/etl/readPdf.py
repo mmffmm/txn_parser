@@ -31,7 +31,7 @@ def transfer_to_csv(path_to_pdf, target_csv_path):
                     if not col_b:
                         # Column B is empty: continuation row, merge description into current record
                         if current_record is not None:
-                            merge_description_value_in_a_row(current_record, row)
+                            merge_description_value_in_diff_rows(current_record, row)
 
                     elif is_valid_transfer_date_row(row):
                         # Column B is a date: flush previous record and start a new one
@@ -43,7 +43,7 @@ def transfer_to_csv(path_to_pdf, target_csv_path):
                         normalize_date_column_overflow(row)
                         normalize_transfer_value_column_overflow(row)
                         normalize_transfer_row_padding(row)
-                        merge_description_value_in_a_column(row)
+                        merge_description_value_in_diff_columns(row)
                         current_record = row
 
                     else:
@@ -67,11 +67,11 @@ def transfer_to_csv(path_to_pdf, target_csv_path):
 
 # Util Functions
 
-def merge_description_value_in_a_row(current_record, row):
+def merge_description_value_in_diff_rows(current_record, row):
     """Merge continuation row: join cols before amount cols, then '|', then join amount cols."""
     # check the columns value first
 
-    merge_description_value_in_a_column(row)
+    merge_description_value_in_diff_columns(row)
     continuation_desc = row[2]
     if continuation_desc:
         if current_record[2]:
@@ -81,7 +81,7 @@ def merge_description_value_in_a_row(current_record, row):
         else:
             current_record[2] = continuation_desc
 
-def merge_description_value_in_a_column(row):
+def merge_description_value_in_diff_columns(row):
     desc_part = row[2:-3]
 
     merged_desc = COLUMN_SEPARATOR.join(
