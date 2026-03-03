@@ -1,14 +1,20 @@
 import os
-import re
 import pandas as pd
 import psycopg2
 from datetime import datetime
 from dotenv import load_dotenv
-
-load_dotenv()
+from .readPdf import DATE_COLUMN_INDEX, DESCRIPTION_COLUMN_INDEX, AMOUNT_COLUMN_INDEX, BALANCE_COLUMN_INDEX
 
 DEBIT = 'Debit'
 CREDIT = 'Credit'
+
+# convert to strings if df.columns are strings
+DATE_COLUMN_INDEX_STR = str(DATE_COLUMN_INDEX)
+DESCRIPTION_COLUMN_INDEX_STR = str(DESCRIPTION_COLUMN_INDEX)
+AMOUNT_COLUMN_INDEX_STR = str(AMOUNT_COLUMN_INDEX)
+BALANCE_COLUMN_INDEX_STR = str(BALANCE_COLUMN_INDEX)
+
+load_dotenv()
 
 def parse_amount(raw: str):
     """Return (amount: float, transaction_type: str) from strings like '36.55-' or '40.00+'."""
@@ -44,10 +50,9 @@ def parse_date(date_col: str):
         return None
 
 
-def parse_description(row):
-    """Join cols 2-8 into a single description string."""
-    parts = [str(row[str(i)]).strip() for i in range(2, 9) if str(row[str(i)]).strip()]
-    return ' '.join(parts)
+def parse_description(value):
+    """Return the description string from the passed value."""
+    return str(value).strip() if value else ''
 
 
 def load_to_db(csv_path):
@@ -55,10 +60,10 @@ def load_to_db(csv_path):
 
     records = []
     for _, row in df.iterrows():
-        transaction_date = parse_date(row['1'])
-        description = parse_description(row)
-        amount, transaction_type = parse_amount(row['9'])
-        balance = parse_balance(row['11'])
+        transaction_date = parse_date(row[DATE_COLUMN_INDEX_STR])
+        description = parse_description(row[DESCRIPTION_COLUMN_INDEX_STR])
+        amount, transaction_type = parse_amount(row[AMOUNT_COLUMN_INDEX_STR])
+        balance = parse_balance(row[BALANCE_COLUMN_INDEX_STR])
         records.append((transaction_date, description, amount, transaction_type, balance))
 
     conn = psycopg2.connect(

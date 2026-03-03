@@ -2,47 +2,56 @@ import pdfplumber
 import pandas as pd
 import re
 
+# Separator config
 COLUMN_SEPARATOR = '|'
 ROW_SEPARATOR = ';'
 
-# Main Function
+# Configuration constants
+DEFAULT_ENCODING = 'utf-8'
+EXPECTED_COLUMN_COUNT = 4
+MAX_DESCRIPTION_ROWS = 4
 
-    # DATE COLUMN consists of column 1 and 2, will be combined into column 2
-    # DESCRIPTION COLUMN consists of column 3 onwards and rows below, will be combined into column 3
-    # TOTAL BALANCE AND TRANSACTION COLUMNS is on the last 3 columns
-    # TOTAL NUMBER OF COLUMNS in csv should be set to 12 only
+DATE_COLUMN_INDEX = 0
+DESCRIPTION_COLUMN_INDEX = 1
+AMOUNT_COLUMN_INDEX = 2
+BALANCE_COLUMN_INDEX = 3
 
-    # Merging Description Column MUST RUN AFTER normalizing transaction date, because transaction got overflow
+# PDF table extraction settings
+TABLE_EXTRACTION_SETTINGS = {
+    "vertical_strategy": "explicit",
+    "horizontal_strategy": "explicit",
+    "explicit_horizontal_lines": [
+        217.05, 221.65, 229.65, 233.65, 241.65,
+        245.65, 253.65, 257.65, 265.65, 269.65, 277.65, 281.65, 289.65, 293.65, 301.65,
+        305.65, 313.65, 317.65, 325.65, 329.65, 337.65, 341.65, 349.65, 353.65, 361.65,
+        365.65, 373.65, 377.65, 385.65, 389.65, 397.65, 401.65, 409.65, 413.65, 421.65,
+        425.65, 433.65, 437.65, 445.65, 449.65, 457.65, 461.65, 469.65, 473.65, 481.65,
+        485.65, 493.65, 497.65, 505.65, 509.65, 517.65, 521.65, 529.65, 533.65, 541.65,
+        545.65, 553.65, 557.65, 565.65, 569.65, 577.65, 581.65, 589.65, 593.65, 601.65,
+        605.65, 613.65, 617.65, 625.65, 629.65, 637.65, 641.65, 649.65, 653.65, 661.65,
+        665.65, 673.65, 677.65, 685.65, 689.65, 697.65, 701.65, 723.26
+    ],
+    "explicit_vertical_lines": [40, 80, 310, 400, 500],
+}
+
+# MAIN FUNCTIONS
 
 def transfer_to_csv(list_of_pdf, target_csv_path):
-
     all_data = []
 
     for pdf_file in list_of_pdf:
-        
         current_record = None
 
         with pdfplumber.open(pdf_file) as pdf:
             for page in pdf.pages:
-                # print("Page Number: ", page.page_number)
-
-                table_settings = {
-                    "vertical_strategy": "explicit",
-                    "horizontal_strategy": "text",
-                    "explicit_vertical_lines": [43.4, 50.578, 74.958, 95.168, 214.42, 235.0, 325.28, 365.66, 371.12, 422.87, 445.65, 485.65]
-                }   
-                tables = page.extract_tables(table_settings)
-
+                tables = page.extract_tables(TABLE_EXTRACTION_SETTINGS)
                 for table in tables:
                     if not table:
                         continue
-
-                    # iterate rows skipping header row (assume first row is header)
-                    for row in table[1:]:
+                    for row in table:
                         if not row:
                             continue
-
-                        col_b = row[1].strip() if len(row) > 1 and row[1] else ''
+                        col_b = row[DATE_COLUMN_INDEX].strip() if len(row) > 1 and row[DATE_COLUMN_INDEX] else ''
                         if not col_b:
                             if current_record is not None:
                                 merge_description_value_in_diff_rows(current_record, row)
@@ -51,13 +60,6 @@ def transfer_to_csv(list_of_pdf, target_csv_path):
                             # flush previous record and start a new one
                             if current_record is not None:
                                 all_data.append(current_record)
-
-                            normalize_date_column_overflow(row)
-                            normalize_transfer_value_column_overflow(row)
-                            merge_description_value_in_diff_columns(row)
-
-                            normalize_total_columns(row)
-
                             current_record = row
 
                         else:
@@ -72,110 +74,48 @@ def transfer_to_csv(list_of_pdf, target_csv_path):
 
     if all_data:
         df = pd.DataFrame(all_data)
-        df.to_csv(target_csv_path, index=False, encoding='utf-8')
+        df.to_csv(target_csv_path, index=False, encoding=DEFAULT_ENCODING)
         print("CSV saved successfully!")
     else:
         print("No tables found.")
 
-# Util Functions
+# UTIL FUNCTIONS
+
+def is_valid_transfer_date_row(row):
+    date = row[DATE_COLUMN_INDEX].strip() if row[DATE_COLUMN_INDEX] else ''
+    return re.match(r'^\d{1,2}/\d{1,2}/\d{2,4}$', date)
 
 def merge_description_value_in_diff_rows(current_record, row):
     """Merge continuation row: join cols before amount cols, then '|', then join amount cols."""
-    # check the columns value first
-
-    merge_description_value_in_diff_columns(row)
-    continuation_desc = row[2]
+    continuation_desc = row[DESCRIPTION_COLUMN_INDEX]
     if continuation_desc:
-        if current_record[2]:
-            current_record[2] = (
-                current_record[2] + ROW_SEPARATOR + continuation_desc
-            ).strip()
+        if current_record[DESCRIPTION_COLUMN_INDEX]:
+            existing_separators = current_record[DESCRIPTION_COLUMN_INDEX].count(ROW_SEPARATOR)
+            if existing_separators < MAX_DESCRIPTION_ROWS - 1:
+                current_record[DESCRIPTION_COLUMN_INDEX] = (
+                    current_record[DESCRIPTION_COLUMN_INDEX] + ROW_SEPARATOR + continuation_desc
+                ).strip()
         else:
-            current_record[2] = continuation_desc
+            current_record[DESCRIPTION_COLUMN_INDEX] = continuation_desc
 
-def merge_description_value_in_diff_columns(row):
-    desc_part = row[2:-3]
-
-    merged_desc = COLUMN_SEPARATOR.join(
-        v.strip() for v in desc_part if v and v.strip()
-    )
-
-    # clear description columns
-    for i in range(2, len(row) - 3):
-        row[i] = ''
-
-    # put merged value into first description column
-    if len(row) > 5:   # make sure structure valid
-        row[2] = merged_desc
-
-def is_valid_transfer_date_row(row):
-    if len(row) < 2:
-        return False
-
-    first = row[0].strip() if row[0] else ''
-    second = row[1].strip() if row[1] else ''
-
-    return (
-        re.match(r'^\d{1,2}$', first) and
-        re.match(r'^/?\d{2}/\d{2}$', second)
-    )
-
-def normalize_date_column_overflow(row):
-    if row[0]:
-        row[1] = row[0] + row[1]
-        row[0] = ''
-
-def normalize_transfer_value_column_overflow(row):
-    if len(row) >= 4 and row[-4]:
-        row[-3] = row[-4] + row[-3]
-        row[-4] = ''
-
-def normalize_total_columns(row):
-    if len(row) < 12:
-        missing = 12 - len(row)
-        for _ in range(missing):
-            row.insert(len(row) - 3, '')
-    elif len(row) >12:
-        extra = len(row) - 12
-        for _ in range(extra):
-            row.pop(3)
-
-
-# Test functions
+# TEST FUNCTIONS
  
 def test_transfer_to_csv(list_of_pdf, target_csv_path):
-
     all_data = []
 
     for pdf_file in list_of_pdf:
-        
         current_record = None
 
         with pdfplumber.open(pdf_file) as pdf:
             for page in pdf.pages:
-                # print("Page Number: ", page.page_number)
-                table_settings = {
-                    "vertical_strategy": "explicit",
-                    "horizontal_strategy": "text",
-                    # "explicit_vertical_lines": [43.4, 214.42, 235.0, 325.28, 371.12, 422.87, 445.65],
-                    "explicit_vertical_lines": [43.4, 50.578, 74.958, 95.168, 214.42, 235.0, 325.28, 365.66, 371.12, 422.87, 445.65, 485.65]
-                }   
-
-                tables = page.extract_tables(table_settings)
-
+                tables = page.extract_tables(TABLE_EXTRACTION_SETTINGS)
                 for table in tables:
                     if not table:
                         continue
-
-                    # iterate rows skipping header row (assume first row is header)
-                    for row in table[1:]:
+                    for row in table:
                         if not row:
                             continue
-
-                        all_data.append(row)
-                        continue
-
-                        col_b = row[1].strip() if len(row) > 1 and row[1] else ''
+                        col_b = row[DATE_COLUMN_INDEX].strip() if len(row) > 1 and row[DATE_COLUMN_INDEX] else ''
                         if not col_b:
                             if current_record is not None:
                                 merge_description_value_in_diff_rows(current_record, row)
@@ -184,13 +124,6 @@ def test_transfer_to_csv(list_of_pdf, target_csv_path):
                             # flush previous record and start a new one
                             if current_record is not None:
                                 all_data.append(current_record)
-
-                            normalize_date_column_overflow(row)
-                            normalize_transfer_value_column_overflow(row)
-                            merge_description_value_in_diff_columns(row)
-
-                            normalize_total_columns(row)
-
                             current_record = row
 
                         else:
@@ -205,7 +138,7 @@ def test_transfer_to_csv(list_of_pdf, target_csv_path):
 
     if all_data:
         df = pd.DataFrame(all_data)
-        df.to_csv(target_csv_path, index=False, encoding='utf-8')
+        df.to_csv(target_csv_path, index=False, encoding=DEFAULT_ENCODING)
         print("CSV saved successfully!")
     else:
         print("No tables found.")
