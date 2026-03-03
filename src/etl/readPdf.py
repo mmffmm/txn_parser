@@ -10,7 +10,7 @@ ROW_SEPARATOR = ';'
     # DATE COLUMN consists of column 1 and 2, will be combined into column 2
     # DESCRIPTION COLUMN consists of column 3 onwards and rows below, will be combined into column 3
     # TOTAL BALANCE AND TRANSACTION COLUMNS is on the last 3 columns
-    # TOTAL NUMBER OF COLUMNS should be set to 11 only
+    # TOTAL NUMBER OF COLUMNS in csv should be set to 12 only
 
     # Merging Description Column MUST RUN AFTER normalizing transaction date, because transaction got overflow
 
@@ -26,10 +26,12 @@ def transfer_to_csv(list_of_pdf, target_csv_path):
             for page in pdf.pages:
                 # print("Page Number: ", page.page_number)
 
-                tables = page.extract_tables({
-                    "vertical_strategy": "text",
-                    "horizontal_strategy": "text"
-                })
+                table_settings = {
+                    "vertical_strategy": "explicit",
+                    "horizontal_strategy": "text",
+                    "explicit_vertical_lines": [43.4, 50.578, 74.958, 95.168, 214.42, 235.0, 325.28, 365.66, 371.12, 422.87, 445.65, 485.65]
+                }   
+                tables = page.extract_tables(table_settings)
 
                 for table in tables:
                     if not table:
@@ -137,3 +139,73 @@ def normalize_total_columns(row):
         extra = len(row) - 12
         for _ in range(extra):
             row.pop(3)
+
+
+# Test functions
+ 
+def test_transfer_to_csv(list_of_pdf, target_csv_path):
+
+    all_data = []
+
+    for pdf_file in list_of_pdf:
+        
+        current_record = None
+
+        with pdfplumber.open(pdf_file) as pdf:
+            for page in pdf.pages:
+                # print("Page Number: ", page.page_number)
+                table_settings = {
+                    "vertical_strategy": "explicit",
+                    "horizontal_strategy": "text",
+                    # "explicit_vertical_lines": [43.4, 214.42, 235.0, 325.28, 371.12, 422.87, 445.65],
+                    "explicit_vertical_lines": [43.4, 50.578, 74.958, 95.168, 214.42, 235.0, 325.28, 365.66, 371.12, 422.87, 445.65, 485.65]
+                }   
+
+                tables = page.extract_tables(table_settings)
+
+                for table in tables:
+                    if not table:
+                        continue
+
+                    # iterate rows skipping header row (assume first row is header)
+                    for row in table[1:]:
+                        if not row:
+                            continue
+
+                        all_data.append(row)
+                        continue
+
+                        col_b = row[1].strip() if len(row) > 1 and row[1] else ''
+                        if not col_b:
+                            if current_record is not None:
+                                merge_description_value_in_diff_rows(current_record, row)
+                        
+                        elif is_valid_transfer_date_row(row):    
+                            # flush previous record and start a new one
+                            if current_record is not None:
+                                all_data.append(current_record)
+
+                            normalize_date_column_overflow(row)
+                            normalize_transfer_value_column_overflow(row)
+                            merge_description_value_in_diff_columns(row)
+
+                            normalize_total_columns(row)
+
+                            current_record = row
+
+                        else:
+                            # flush and stop — not a transaction row
+                            if current_record is not None:
+                                all_data.append(current_record)
+                                current_record = None
+
+        # Flush the last accumulated record
+        if current_record is not None:
+            all_data.append(current_record)
+
+    if all_data:
+        df = pd.DataFrame(all_data)
+        df.to_csv(target_csv_path, index=False, encoding='utf-8')
+        print("CSV saved successfully!")
+    else:
+        print("No tables found.")
