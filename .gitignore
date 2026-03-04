@@ -11,11 +11,15 @@ venv/
 
 # transaction pdf
 transaction_PDF/*
-!transaction_PDF/.gitkeep
+!transaction_PDF/processed_PDF
+transaction_PDF/processed_PDF/*
+!transaction_PDF/processed_PDF/.gitkeep
 
 # target csv
-target_CSV/*
-!target_CSV/.gitkeep
+transaction_CSV/*
+!transaction_CSV/processed_CSV
+transaction_CSV/processed_CSV/*
+!transaction_CSV/processed_CSV/.gitkeep
 
 # environment notes
 envNotes.txt

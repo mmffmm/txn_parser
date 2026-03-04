@@ -86,5 +86,18 @@ def load_to_db(csv_path):
                     records,
                 )
         print(f"Loaded {len(records)} rows into 'transactions' table.")
+        return True
+    except psycopg2.OperationalError as e:
+        print(f"Database connection error: {e}")
+        return False
+    except psycopg2.IntegrityError as e:
+        print(f"Data integrity error (duplicate or constraint violation): {e}")
+        return False
+    except psycopg2.DatabaseError as e:
+        print(f"Database error: {e}")
+        return False
+    except Exception as e:
+        print(f"Unexpected error while loading to DB: {e}")
+        return False
     finally:
         conn.close()

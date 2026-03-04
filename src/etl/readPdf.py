@@ -1,12 +1,16 @@
 import pdfplumber
 import pandas as pd
 import re
+import shutil
+import os
 
 # Separator config
 COLUMN_SEPARATOR = '|'
 ROW_SEPARATOR = ';'
 
 # Configuration constants
+PROCESSED_PDF_DIR = 'transaction_PDF/processed_PDF'
+
 DEFAULT_ENCODING = 'utf-8'
 EXPECTED_COLUMN_COUNT = 4
 MAX_DESCRIPTION_ROWS = 4
@@ -36,8 +40,9 @@ TABLE_EXTRACTION_SETTINGS = {
 
 # MAIN FUNCTIONS
 
-def transfer_to_csv(list_of_pdf, target_csv_path):
+def read_pdf(list_of_pdf):
     all_data = []
+    success_processed_pdf = []
 
     for pdf_file in list_of_pdf:
         current_record = None
@@ -54,9 +59,9 @@ def transfer_to_csv(list_of_pdf, target_csv_path):
                         col_b = row[DATE_COLUMN_INDEX].strip() if len(row) > 1 and row[DATE_COLUMN_INDEX] else ''
                         if not col_b:
                             if current_record is not None:
-                                merge_description_value_in_diff_rows(current_record, row)
+                                _merge_description_value_in_diff_rows(current_record, row)
                         
-                        elif is_valid_transfer_date_row(row):    
+                        elif _is_valid_transfer_date_row(row):    
                             # flush previous record and start a new one
                             if current_record is not None:
                                 all_data.append(current_record)
@@ -71,22 +76,24 @@ def transfer_to_csv(list_of_pdf, target_csv_path):
         # Flush the last accumulated record
         if current_record is not None:
             all_data.append(current_record)
+        
+        # If success
+        success_processed_pdf.append(pdf_file)
 
-    if all_data:
-        df = pd.DataFrame(all_data)
-        df.to_csv(target_csv_path, index=False, encoding=DEFAULT_ENCODING)
-        print("CSV saved successfully!")
+    df = pd.DataFrame(all_data)
+    if not df.empty:
+        return df, success_processed_pdf
     else:
-        print("No tables found.")
+        print("No data found.")
+        return df, success_processed_pdf
 
 # UTIL FUNCTIONS
 
-def is_valid_transfer_date_row(row):
+def _is_valid_transfer_date_row(row):
     date = row[DATE_COLUMN_INDEX].strip() if row[DATE_COLUMN_INDEX] else ''
     return re.match(r'^\d{1,2}/\d{1,2}/\d{2,4}$', date)
 
-def merge_description_value_in_diff_rows(current_record, row):
-    """Merge continuation row: join cols before amount cols, then '|', then join amount cols."""
+def _merge_description_value_in_diff_rows(current_record, row):
     continuation_desc = row[DESCRIPTION_COLUMN_INDEX]
     if continuation_desc:
         if current_record[DESCRIPTION_COLUMN_INDEX]:
@@ -97,6 +104,26 @@ def merge_description_value_in_diff_rows(current_record, row):
                 ).strip()
         else:
             current_record[DESCRIPTION_COLUMN_INDEX] = continuation_desc
+
+def move_to_processed_pdf_dir(list_of_pdf, csv_filename):
+
+    folder_name = os.path.splitext(csv_filename)[0]
+    target_dir = os.path.join(PROCESSED_PDF_DIR, folder_name)
+    os.makedirs(target_dir, exist_ok=True)
+
+    moved_files = []
+
+    for pdf in list_of_pdf:
+        try:
+            shutil.move(pdf, target_dir)
+            moved_files.append(pdf)
+            print(f"Moved: {pdf}")
+        except FileNotFoundError:
+            print(f"Error: File not found — {pdf}")
+        except Exception as e:
+            print(f"Error moving '{pdf}': {e}")
+    
+    return moved_files
 
 # TEST FUNCTIONS
  
@@ -118,9 +145,9 @@ def test_transfer_to_csv(list_of_pdf, target_csv_path):
                         col_b = row[DATE_COLUMN_INDEX].strip() if len(row) > 1 and row[DATE_COLUMN_INDEX] else ''
                         if not col_b:
                             if current_record is not None:
-                                merge_description_value_in_diff_rows(current_record, row)
+                                _merge_description_value_in_diff_rows(current_record, row)
                         
-                        elif is_valid_transfer_date_row(row):    
+                        elif _is_valid_transfer_date_row(row):    
                             # flush previous record and start a new one
                             if current_record is not None:
                                 all_data.append(current_record)
