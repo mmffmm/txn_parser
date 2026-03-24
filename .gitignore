@@ -1,7 +1,10 @@
 __pycache__/
 venv/
+.venv/
 .env
 *.pyc
+storage/
+db/app.db
 
 # Ignore all markdown files
 *.md

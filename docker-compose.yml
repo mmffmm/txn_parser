@@ -1,4 +1,23 @@
 services:
+  web:
+    build: .
+    container_name: bankstatement-web
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://postgres:postgres@postgres:5432/transaction_db}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      HOST: 0.0.0.0
+      PORT: 8000
+    depends_on:
+      - postgres
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+    networks:
+      - elt_network
+
   postgres:
     image: postgres:15
     container_name: postgres

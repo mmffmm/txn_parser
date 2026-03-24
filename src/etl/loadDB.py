@@ -5,8 +5,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 from .readPdf import DATE_COLUMN_INDEX, DESCRIPTION_COLUMN_INDEX, AMOUNT_COLUMN_INDEX, BALANCE_COLUMN_INDEX
 
-DEBIT = 'Debit'
-CREDIT = 'Credit'
+DEBIT = 'DEBIT'
+CREDIT = 'CREDIT'
 
 # convert to strings if df.columns are strings
 DATE_COLUMN_INDEX_STR = str(DATE_COLUMN_INDEX)
